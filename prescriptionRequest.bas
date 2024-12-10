@@ -129,20 +129,61 @@ Sub ProcessPrescriptionRequests()
                 FirstName = ExtractFormField(olMail.Body, "First Name:")
                 Debug.Print "Extracted First Name: " & FirstName
                 
-                ' Compose the body
+                ' Count how many files were found and not found
+                Dim foundCount As Integer
+                foundCount = Len(Attachments) - Len(Replace(Attachments, ";", ""))
+                
+                Dim missingCount As Integer
+                missingCount = UBound(Parts) + 1 - foundCount
+                
+                ' Compose the body based on scenario
                 Dim emailBody As String
                 emailBody = "Hi " & FirstName & "," & vbNewLine & vbNewLine & _
-                           "Thank you for contacting Edmund Optics." & vbNewLine & vbNewLine & _
-                           "Attached is the prescription file you requested. This file has been made with the most up-to-date version of Zemax, " & _
-                           "so if you do encounter issues, be sure to check which version you are running. Please note this is a Zemax archive file, " & _
-                           "so you will need to open it by clicking on File and then ""Load Archive"". " & _
-                           "Please let me know if you have any questions. Have a great day!" & vbNewLine  ' Single line break before signature
+                           "Thank you for contacting Edmund Optics." & vbNewLine & vbNewLine
                 
-                ' If there are unavailable parts, add them to the email
+                ' Different scenarios for the main message
+                If foundCount > 0 And missingCount = 0 Then
+                    ' All requested files are available
+                    If foundCount = 1 Then
+                        emailBody = emailBody & _
+                            "Attached is the prescription file you requested. This file has been made with the most up-to-date version of Zemax, " & _
+                            "so if you do encounter issues, be sure to check which version you are running. Please note this is a Zemax archive file, " & _
+                            "so you will need to open it by clicking on File and then ""Load Archive""."
+                    Else
+                        emailBody = emailBody & _
+                            "Attached are the prescription files you requested. These files have been made with the most up-to-date version of Zemax, " & _
+                            "so if you do encounter issues, be sure to check which version you are running. Please note these are Zemax archive files, " & _
+                            "so you will need to open them by clicking on File and then ""Load Archive""."
+                    End If
+                
+                ElseIf foundCount = 0 And missingCount > 0 Then
+                    ' No requested files are available
+                    If missingCount = 1 Then
+                        emailBody = emailBody & _
+                            "I apologize, but the prescription file you requested is not currently available."
+                    Else
+                        emailBody = emailBody & _
+                            "I apologize, but the prescription files you requested are not currently available."
+                    End If
+                
+                Else
+                    ' Some files found, some missing
+                    emailBody = emailBody & _
+                        "I have attached the available prescription files you requested. These files have been made with the most up-to-date version of Zemax, " & _
+                        "so if you do encounter issues, be sure to check which version you are running. Please note these are Zemax archive files, " & _
+                        "so you will need to open them by clicking on File and then ""Load Archive""."
+                End If
+                
+                ' Add the unavailable parts message if any are missing
                 If UnavailableParts <> "" Then
                     UnavailableParts = Left(UnavailableParts, Len(UnavailableParts) - 2)
-                    emailBody = emailBody & "Note: The following part numbers were not found: " & UnavailableParts & vbNewLine
+                    emailBody = emailBody & vbNewLine & vbNewLine & _
+                               "The following part numbers were not available: " & UnavailableParts
                 End If
+                
+                ' Add closing
+                emailBody = emailBody & vbNewLine & vbNewLine & _
+                           "Please let me know if you have any questions. Have a great day!" & vbNewLine
                 
                 ' Set the body while preserving signature
                 ResponseMail.GetInspector.WordEditor.Range(0, 0).InsertBefore emailBody

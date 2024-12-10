@@ -5,6 +5,15 @@ Sub ProcessPrescriptionRequests()
     Debug.Print "Starting macro..."
     
     On Error Resume Next  ' Add basic error handling
+    Dim errorLog As String
+    errorLog = ""
+    
+    ' Add error checking after critical operations
+    If Err.Number <> 0 Then
+        errorLog = errorLog & "Error: " & Err.Description & vbCrLf
+        Debug.Print "Error occurred: " & Err.Description
+        Err.Clear
+    End If
     
     Dim olNS As Outlook.NameSpace
     Dim olFolder As Outlook.folder
@@ -55,8 +64,9 @@ Sub ProcessPrescriptionRequests()
             Debug.Print "Categories: " & olMail.Categories
             
             ' Change the criteria to look for prescription requests
-            If InStr(olMail.Subject, "Edmund Optics Prescription Request") > 0 Then
-                Debug.Print "Processing email - matches criteria"
+            If InStr(olMail.Subject, "Edmund Optics Prescription Request") > 0 And _
+               InStr(olMail.Categories, "Blaine") > 0 Then
+                Debug.Print "Processing email - matches criteria for Blaine"
                 
                 ' Extract the recipient email from the body
                 RecipientEmail = ExtractRecipientEmail(olMail.Body)
@@ -82,7 +92,10 @@ Sub ProcessPrescriptionRequests()
                     End If
                     
                     For Each prescFile In prescFolder.Files
-                        If InStr(prescFile.Name, Part) > 0 Then
+                        Debug.Print "Checking file: " & prescFile.Name & " against part: " & Part
+                        ' Check if file starts with the part number
+                        If Left(prescFile.Name, Len(Part)) = Part Then
+                            Debug.Print "Found matching file: " & prescFile.Name & " for part: " & Part
                             Attachments = Attachments & FilePath & prescFile.Name & ";"
                             Found = True
                             Exit For
@@ -95,58 +108,65 @@ Sub ProcessPrescriptionRequests()
                     End If
                 Next
                 
-                ' Create the response email
+                ' Create the response email and set properties before displaying
                 Set ResponseMail = olMail.Reply
                 
-                ' Set the "From" address to your email
+                ' Set the sender before displaying
+                ResponseMail.SendUsingAccount = Application.Session.Accounts.Item("bwilson@edmundoptics.com")
                 ResponseMail.SentOnBehalfOfName = "bwilson@edmundoptics.com"
                 
-                ' Get signature from default settings
-                Dim signature As String
-                signature = GetDefaultSignature()
+                ' Display to get the signature
+                ResponseMail.Display
+                
+                ' Clear the default recipient and set the correct one
+                ResponseMail.To = ""  ' Clear default recipient
+                RecipientEmail = ExtractFormField(olMail.Body, "Email Address:")
+                ResponseMail.To = RecipientEmail
+                Debug.Print "Setting recipient to: " & RecipientEmail
                 
                 ' Extract the first name from the form submission
                 Dim FirstName As String
                 FirstName = ExtractFormField(olMail.Body, "First Name:")
                 Debug.Print "Extracted First Name: " & FirstName
                 
-                ' Compose the subject and body
-                ResponseMail.HTMLBody = "<p>Hi " & FirstName & ",</p>" & _
-                                        "<p>Thank you for contacting Edmund Optics.</p>" & _
-                                        "<p>Attached is the prescription file you requested. This file has been made with the most up-to-date version of Zemax, " & _
-                                        "so if you do encounter issues, be sure to check which version you are running. Please note this is a Zemax archive file, " & _
-                                        "so you will need to open it by clicking on File and then ""Load Archive"". " & _
-                                        "Please let me know if you have any questions. Have a great day!</p>" & _
-                                        signature
+                ' Compose the body
+                Dim emailBody As String
+                emailBody = "Hi " & FirstName & "," & vbNewLine & vbNewLine & _
+                           "Thank you for contacting Edmund Optics." & vbNewLine & vbNewLine & _
+                           "Attached is the prescription file you requested. This file has been made with the most up-to-date version of Zemax, " & _
+                           "so if you do encounter issues, be sure to check which version you are running. Please note this is a Zemax archive file, " & _
+                           "so you will need to open it by clicking on File and then ""Load Archive"". " & _
+                           "Please let me know if you have any questions. Have a great day!" & vbNewLine  ' Single line break before signature
                 
                 ' If there are unavailable parts, add them to the email
                 If UnavailableParts <> "" Then
-                    ResponseMail.HTMLBody = ResponseMail.HTMLBody & _
-                                           "<p>Note: The following part numbers were not found: " & UnavailableParts & "</p>"
+                    UnavailableParts = Left(UnavailableParts, Len(UnavailableParts) - 2)
+                    emailBody = emailBody & "Note: The following part numbers were not found: " & UnavailableParts & vbNewLine
                 End If
                 
+                ' Set the body while preserving signature
+                ResponseMail.GetInspector.WordEditor.Range(0, 0).InsertBefore emailBody
+                
                 ' Attach files
-                For Each Attachment In Split(Attachments, ";")
-                    If Attachment <> "" Then
-                        ResponseMail.Attachments.Add Attachment
-                    End If
-                Next
-                
-                ' Get default signature
-                Dim objSignatureObject As Object
-                Dim strSignature As String
-                
-                ' Get signature from Outlook
-                strSignature = ResponseMail.HTMLBody
-                ResponseMail.Display
-                
-                ' Wait briefly for signature to load
-                DoEvents
-                
-                ' Get the signature and combine with our message
-                If ResponseMail.HTMLBody <> strSignature Then
-                    strSignature = Replace(ResponseMail.HTMLBody, strSignature, "")
-                    ResponseMail.HTMLBody = ResponseMail.HTMLBody & strSignature
+                If Len(Attachments) > 0 Then
+                    Dim AttachPaths() As String
+                    AttachPaths = Split(Attachments, ";")
+                    
+                    For Each Attachment In AttachPaths
+                        If Len(Attachment) > 0 Then
+                            Debug.Print "Attempting to attach: " & Attachment
+                            On Error Resume Next
+                            ResponseMail.Attachments.Add Attachment
+                            If Err.Number <> 0 Then
+                                Debug.Print "Error attaching file: " & Err.Description
+                                errorLog = errorLog & "Failed to attach: " & Attachment & " - " & Err.Description & vbCrLf
+                                Err.Clear
+                            Else
+                                Debug.Print "Successfully attached: " & Attachment
+                            End If
+                            On Error GoTo 0
+                        End If
+                    Next
                 End If
             End If
         End If
@@ -158,29 +178,43 @@ Sub ProcessPrescriptionRequests()
     Set olMail = Nothing
     
     On Error GoTo 0  ' Turn off error handling
+    
+    ' At the end of the macro
+    If Len(errorLog) > 0 Then
+        Debug.Print "Errors occurred during execution:" & vbCrLf & errorLog
+        MsgBox "Some errors occurred. Check the immediate window for details.", vbExclamation
+    End If
 End Sub
 
 Function ExtractPartNumbers(Body As String) As String
-    Dim RegExp As Object
-    Dim Matches As Object
-    Dim Match As Object
+    Dim Lines() As String
+    Dim i As Long
     Dim PartNumbers As String
     
-    ' Regular expression to match 5-digit numbers
-    Set RegExp = CreateObject("VBScript.RegExp")
-    RegExp.Pattern = "\b\d{5}\b"
-    RegExp.Global = True
+    Debug.Print "Searching for part numbers in body:"
     
-    ' Find matches
-    If RegExp.Test(Body) Then
-        Set Matches = RegExp.Execute(Body)
-        For Each Match In Matches
-            PartNumbers = PartNumbers & Match.Value & ","
-        Next
-    End If
+    ' Split body into lines
+    Lines = Split(Body, vbCrLf)
     
-    ' Return list of part numbers
-    ExtractPartNumbers = Left(PartNumbers, Len(PartNumbers) - 1) ' Remove trailing comma
+    ' Look for question 2
+    For i = 0 To UBound(Lines)
+        If InStr(Lines(i), "2. What are the stock numbers") > 0 Then
+            Debug.Print "Found stock numbers line: " & Lines(i)
+            ' Extract everything after the colon and tab
+            If InStr(Lines(i), vbTab) > 0 Then
+                PartNumbers = Trim(Split(Lines(i), vbTab)(1))
+            ElseIf InStr(Lines(i), ":") > 0 Then
+                PartNumbers = Trim(Split(Lines(i), ":")(1))
+            End If
+            Debug.Print "Extracted part numbers: " & PartNumbers
+            Exit For
+        End If
+    Next
+    
+    ' Clean up the part numbers (remove spaces if any)
+    PartNumbers = Replace(PartNumbers, " ", "")
+    Debug.Print "Final part numbers string: " & PartNumbers
+    ExtractPartNumbers = PartNumbers
 End Function
 
 Function ExtractRecipientEmail(Body As String) As String
@@ -276,5 +310,3 @@ Function GetDefaultSignature() As String
     Set fso = Nothing
     Set ts = Nothing
 End Function
-
-

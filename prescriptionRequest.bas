@@ -111,9 +111,15 @@ Sub ProcessPrescriptionRequests()
                 ' Create the response email and set properties before displaying
                 Set ResponseMail = olMail.Reply
                 
+                ' Get current user's email address
+                Dim currentUserEmail As String
+                currentUserEmail = Application.Session.CurrentUser.AddressEntry.GetExchangeUser.PrimarySmtpAddress
+                
                 ' Set the sender before displaying
-                ResponseMail.SendUsingAccount = Application.Session.Accounts.Item("bwilson@edmundoptics.com")
-                ResponseMail.SentOnBehalfOfName = "bwilson@edmundoptics.com"
+                ResponseMail.SendUsingAccount = Application.Session.Accounts.Item(currentUserEmail)
+                ResponseMail.SentOnBehalfOfName = currentUserEmail
+                
+                Debug.Print "Setting sender to: " & currentUserEmail
                 
                 ' Display to get the signature
                 ResponseMail.Display
@@ -183,7 +189,7 @@ Sub ProcessPrescriptionRequests()
                 
                 ' Add closing
                 emailBody = emailBody & vbNewLine & vbNewLine & _
-                           "Please let me know if you have any questions. Have a great day!" & vbNewLine
+                           "Please let me know if you have any questions. Have a great day!"
                 
                 ' Set the body while preserving signature
                 ResponseMail.GetInspector.WordEditor.Range(0, 0).InsertBefore emailBody

@@ -115,11 +115,17 @@ Sub ProcessPrescriptionRequests()
                 Dim currentUserEmail As String
                 currentUserEmail = Application.Session.CurrentUser.AddressEntry.GetExchangeUser.PrimarySmtpAddress
                 
-                ' Set the sender before displaying
-                ResponseMail.SendUsingAccount = Application.Session.Accounts.Item(currentUserEmail)
-                ResponseMail.SentOnBehalfOfName = currentUserEmail
+                ' Find the correct account to use
+                Dim acc As Outlook.Account
+                For Each acc In Application.Session.Accounts
+                    If acc.SmtpAddress = currentUserEmail Then
+                        ResponseMail.SendUsingAccount = acc
+                        Exit For
+                    End If
+                Next acc
                 
-                Debug.Print "Setting sender to: " & currentUserEmail
+                ' Clear any "on behalf of" settings
+                ResponseMail.SentOnBehalfOfName = ""
                 
                 ' Display to get the signature
                 ResponseMail.Display

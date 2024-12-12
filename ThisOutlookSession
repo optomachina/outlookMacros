@@ -1,3 +1,0 @@
-Private Sub Application_Startup()
-    InitializeInboxMonitor
-End Sub 

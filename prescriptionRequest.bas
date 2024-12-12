@@ -1,5 +1,12 @@
 Option Explicit
 
+Public olInboxEvents As InboxEvents
+
+Sub InitializeInboxMonitor()
+    Set olInboxEvents = New InboxEvents
+    olInboxEvents.Initialize
+End Sub
+
 Sub ProcessPrescriptionRequests()
     ' Add these near the start
     Debug.Print "Starting macro..."

@@ -70,14 +70,10 @@ Sub ProcessPrescriptionRequests()
             Debug.Print "Found email with subject: " & olMail.Subject
             Debug.Print "Categories: " & olMail.Categories
             
-            ' Change the criteria to look for prescription requests
-            If InStr(olMail.Subject, "Edmund Optics Prescription Request") > 0 Then
+            ' Change the criteria to check both subject and category
+            If InStr(olMail.Subject, "Edmund Optics Prescription Request") > 0 And _
+               olMail.Categories = "Blaine" Then
                 Debug.Print "Processing email - matches criteria"
-                
-                ' Categorize the email as "Blaine"
-                olMail.Categories = "Blaine"
-                olMail.Save
-                Debug.Print "Categorized email as Blaine"
                 
                 ' Extract the recipient email from the body
                 RecipientEmail = ExtractRecipientEmail(olMail.Body)

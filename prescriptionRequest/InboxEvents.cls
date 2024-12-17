@@ -1,14 +1,14 @@
 Private WithEvents olItems As Outlook.Items
+Private WithEvents olInbox As Outlook.folder
 
 Public Sub Initialize()
     Dim olApp As Outlook.Application
     Dim olNS As Outlook.NameSpace
-    Dim olFolder As Outlook.folder
     
     Set olApp = Application
     Set olNS = olApp.GetNamespace("MAPI")
-    Set olFolder = olNS.Folders("Technical Support USA").Folders("Inbox")
-    Set olItems = olFolder.Items
+    Set olInbox = olNS.Folders("Technical Support USA").Folders("Inbox")
+    Set olItems = olInbox.Items
 End Sub
 
 Private Sub olItems_ItemAdd(ByVal Item As Object)
@@ -17,4 +17,26 @@ Private Sub olItems_ItemAdd(ByVal Item As Object)
             ProcessPrescriptionRequests
         End If
     End If
+End Sub
+
+Private Sub olItems_ItemChange(ByVal Item As Object)
+    On Error Resume Next
+    
+    If TypeOf Item Is Outlook.MailItem Then
+        Dim mail As Outlook.MailItem
+        Set mail = Item
+        
+        If Err.Number = 0 Then  ' Check if we can access the mail item
+            If InStr(mail.Subject, "Edmund Optics Prescription Request") > 0 And _
+               mail.Categories = "Blaine" Then
+                Debug.Print "Processing changed item: " & mail.Subject
+                ProcessPrescriptionRequests
+            End If
+        Else
+            Debug.Print "Error accessing mail item: " & Err.Description
+            Err.Clear
+        End If
+    End If
+    
+    On Error GoTo 0
 End Sub 

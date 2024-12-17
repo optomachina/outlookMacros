@@ -68,12 +68,16 @@ Sub ProcessPrescriptionRequests()
         If TypeOf olItem Is MailItem Then
             Set olMail = olItem
             Debug.Print "Found email with subject: " & olMail.Subject
-            Debug.Print "Categories: " & olMail.Categories
             
-            ' Change the criteria to check both subject and category
+            ' Check if email is unprocessed and has the correct subject
             If InStr(olMail.Subject, "Edmund Optics Prescription Request") > 0 And _
-               olMail.Categories = "Blaine" Then
+               olMail.FlagStatus <> olFlagComplete Then
                 Debug.Print "Processing email - matches criteria"
+                
+                ' Mark email as complete and categorize to Blaine
+                olMail.Categories = "Blaine"
+                olMail.FlagStatus = olFlagComplete
+                olMail.Save
                 
                 ' Extract the recipient email from the body
                 RecipientEmail = ExtractRecipientEmail(olMail.Body)
